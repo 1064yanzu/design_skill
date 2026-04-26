@@ -5,7 +5,7 @@
 #   ./convert-formats.sh input.mp4 [gif_width] [--minterpolate]
 #
 # Produces next to the input:
-#   <name>-60fps.mp4   (1920x1080, 60fps, frame-duplicated by default)
+#   <name>-60fps.mp4   (1920x1080, 60fps, frame-duplicated by default, preserves audio if present)
 #   <name>.gif         (scaled width, 15fps, palette-optimized)
 #
 # Flags:
@@ -61,9 +61,12 @@ fi
 
 # -profile:v high -level 4.0 → broad H.264 compatibility (QuickTime, Safari, mobile)
 # -movflags +faststart        → moov atom upfront, streamable / instant-play
+# -map 0:a?                   → preserve existing audio when present
 ffmpeg -y -loglevel error -i "$INPUT" \
+  -map 0:v:0 -map 0:a? \
   -vf "$VFILTER" \
   -c:v libx264 -pix_fmt yuv420p -profile:v high -level 4.0 \
+  -c:a aac -b:a 192k \
   -crf 18 -preset medium -movflags +faststart \
   "$OUT60"
 MP4_SIZE=$(du -h "$OUT60" | cut -f1)

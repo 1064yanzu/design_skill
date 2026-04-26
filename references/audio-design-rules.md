@@ -16,6 +16,14 @@
 
 **只做BGM的动画是残废的**——观众潜意识感知到「画在动但没声音响应」，廉价感的根源就在这里。
 
+如果场景包含讲解、教程、解释型信息图、产品 walkthrough，还要再加一层：
+
+| 层 | 作用 | 时间尺度 | 和视觉的关系 | 占据频段 |
+|---|---|---|---|---|
+| **Voiceover / TTS（语义层）** | 传递信息与叙事推进 | 句子级、段落级 | **内容同步**（段落级对齐） | **中频 300Hz-4kHz** |
+
+这时优先级变成：**Voiceover > SFX > BGM**。BGM 只能铺底，不能抢语义中心。
+
 ---
 
 ## 金标准 · 黄金配比
@@ -43,6 +51,12 @@ Anthropic 的秘诀不是「SFX 音量大」，是**频段分层**：
 - BGM 入：`afade=in:st=0:d=0.3`（0.3s，避免硬切）
 - BGM 出：`afade=out:st=N-1.5:d=1.5`（1.5s 长尾，收束感）
 - SFX 自带 envelope，不需要额外 fade
+
+### 有旁白时的混音规则
+- **BGM 音量**：先降到 `0.12-0.20`
+- **旁白音量**：通常 `0.90-1.00`
+- **Ducking**：BGM 必须在旁白出现时自动下潜，不要靠整段静态压低糊过去
+- **优先选 tutorial / educational 类 BGM**，少用强节拍广告音乐
 
 ---
 
@@ -206,6 +220,23 @@ ffmpeg -y -i video.mp4 -i sfx-track.mp3 -i bgm.mp3 \
   -map 0:v -map "[a]" -c:v copy -c:a aac -b:a 192k final.mp4
 ```
 
+### 模板 4 · 视频 + Voiceover + BGM（带自动 ducking）
+```bash
+ffmpeg -y -i video.mp4 -i voiceover.wav -i bgm.mp3 \
+  -filter_complex "\
+[1:a]atrim=0:25,asetpts=PTS-STARTPTS,volume=1.0[voice];\
+[2:a]atrim=0:25,asetpts=PTS-STARTPTS,afade=in:st=0:d=0.3,afade=out:st=23.5:d=1.5,\
+     lowpass=f=4000,volume=0.18[bgm];\
+[bgm][voice]sidechaincompress=threshold=0.015:ratio=10:attack=20:release=300[bgmduck];\
+[bgmduck][voice]amix=inputs=2:duration=first:normalize=0[a]" \
+  -map 0:v -map "[a]" -c:v copy -c:a aac -b:a 192k final.mp4
+```
+
+说明：
+- `sidechaincompress` 让 BGM 在旁白讲话时自动下潜
+- `lowpass` 继续把 BGM 压到中低频，给旁白让出 presence 区
+- 如果旁白本身已经很亮，不要再给 BGM 加高频增强
+
 ---
 
 ## 失败模式速查
@@ -218,6 +249,8 @@ ffmpeg -y -i video.mp4 -i sfx-track.mp3 -i bgm.mp3 \
 | 动画结束 BGM 突然断 | 没做 fade out | `afade=out:st=N-1.5:d=1.5` |
 | SFX 重叠成糊 | cue 太密 + 每个 SFX 时长太长 | SFX 时长控到 0.5s 以内，cue 间隔 ≥ 0.2s |
 | 公众号 mp4 没声音 | 公众号有时会 mute auto-play | 不用担心，用户点开会有声音；gif 本来就没声音 |
+| 旁白被音乐盖住 | BGM 太响，且没有 ducking | BGM 降到 0.12-0.20，并启用 `sidechaincompress` |
+| 旁白像贴在画面上 | 旁白文案节奏和镜头段落不对 | 先改文案分句和停顿，再改音量 |
 
 ---
 
@@ -242,6 +275,7 @@ ffmpeg -y -i video.mp4 -i sfx-track.mp3 -i bgm.mp3 \
 - [ ] 频段：BGM lowpass 4kHz + SFX highpass 800Hz？
 - [ ] amix normalize=0（保留动态范围）？
 - [ ] BGM fade-in 0.3s + fade-out 1.5s？
+- [ ] 若有旁白，BGM 已 duck，且不会盖住字词？
 - [ ] SFX 数量是否合适（按场景性格选密度）？
 - [ ] 每个 SFX 和视觉 beat 同帧对齐（±1 帧内）？
 - [ ] Logo reveal 音效时长够（建议 1.5s）？

@@ -634,15 +634,17 @@ Screen 组件接 callback props（`onEnter`、`onClose`、`onTabChange`、`onOpe
 7. **验证**：用Playwright截图（见 `references/verification.md`），检查控制台错误，发给用户。
    🛑 **检查点4：交付前自己肉眼过一遍浏览器**。AI写的代码经常有interaction bug。
 8. **总结**：极简，只说caveats和next steps。
-9. **（默认）导出视频 · 必带 SFX + BGM**：动画 HTML 的**默认交付形态是带音频的 MP4**，不是纯画面。无声版本等于半成品——用户潜意识感知「画在动但没声音响应」，廉价感的根源就在这里。流水线：
+9. **（默认）导出视频 · 必带音频**：动画 HTML 的**默认交付形态是带音频的 MP4**，不是纯画面。无声版本等于半成品——用户潜意识感知「画在动但没声音响应」，廉价感的根源就在这里。流水线：
    - `scripts/render-video.js` 录 25fps 纯画面 MP4（只是中间产物，**不是成品**）
    - `scripts/convert-formats.sh` 派生 60fps MP4 + palette 优化 GIF（视平台需要）
-   - `scripts/add-music.sh` 加 BGM（6 首场景化配乐：tech/ad/educational/tutorial + alt 变体）
+   - **有旁白需求时**：先用 `scripts/generate-tts.js` 按对应 provider 的配置文件生成 TTS 音轨（当前已兼容 Xiaomi MiMo TTS、GeekAI、NewAPI/OpenAI 兼容 `audio/speech`）
+   - `scripts/add-music.sh` 合成最终成品音轨：支持 `BGM only`、`voiceover only`、`voiceover + BGM` 三种模式
    - SFX 按 `references/audio-design-rules.md` 设计 cue 清单（时间轴 + 音效类型），用 `assets/sfx/<category>/*.mp3` 37 个预制资源，按配方 A/B/C/D 选密度（发布 hero ≈ 6个/10s，工具演示 ≈ 0-2个/10s）
-   - **BGM + SFX 双轨制必须同时做**——只做 BGM 是 ⅓ 分完成度；SFX 占高频、BGM 占低频，频段隔离见 audio-design-rules.md 的 ffmpeg 模板
+   - **有讲解场景时优先考虑 TTS / 真人旁白**。教程、解释型信息图、产品 walkthrough，只给 BGM 不给 voiceover，信息传达会断层
+   - **BGM + SFX 双轨制必须同时做**——只做 BGM 是 ⅓ 分完成度；若还存在旁白，则旁白优先、BGM 负责铺底，频段隔离与 ducking 见 `references/audio-design-rules.md`
    - 交付前 `ffprobe -select_streams a` 确认有 audio stream，没有则不是成品
    - **跳过音频的条件**：用户明确说「不要音频」「纯画面」「我要自己配音」——否则默认带。
-   - 参考完整流程见 `references/video-export.md` + `references/audio-design-rules.md` + `references/sfx-library.md`。
+   - 参考完整流程见 `references/video-export.md` + `references/audio-design-rules.md` + `references/sfx-library.md` + `docs/mimo-tts.md`。
 10. **（可选）专家评审**：用户若提「评审」「好不好看」「review」「打分」，或你对产出有疑问想主动质检，按 `references/critique-guide.md` 走 5 维度评审——哲学一致性 / 视觉层级 / 细节执行 / 功能性 / 创新性各 0-10 分，输出总评 + Keep（做得好的）+ Fix（严重程度 ⚠️致命 / ⚡重要 / 💡优化）+ Quick Wins（5 分钟能做的前 3 件事）。评审设计不评设计师。
 
 **检查点原则**：碰到🛑就停下，明确告诉用户"我做了X，下一步打算Y，你确认吗？"然后真的**等**。不要说完自己就开始做。
@@ -741,6 +743,7 @@ Screen 组件接 callback props（`onEnter`、`onClose`、`onTabChange`、`onOpe
 | 输出完后验证 | `references/verification.md` + `scripts/verify.py` |
 | **设计评审/打分**（设计完成后可选） | `references/critique-guide.md`（5 维度评分+常见问题清单） |
 | **动画导出MP4/GIF/加BGM** | `references/video-export.md` + `scripts/render-video.js` + `scripts/convert-formats.sh` + `scripts/add-music.sh` |
+| **动画加 TTS / 旁白** | `docs/mimo-tts.md` + `docs/examples/*.config.example.json` + `scripts/generate-tts.js` + `scripts/add-music.sh` |
 | **动画加音效SFX**（苹果发布会级，37个预制） | `references/sfx-library.md` + `assets/sfx/<category>/*.mp3` |
 | **动画音频配置规则**（SFX+BGM双轨制、黄金配比、ffmpeg模板、场景配方） | `references/audio-design-rules.md` |
 | **Apple画廊展示风格**（3D倾斜+悬浮卡片+缓慢pan+焦点切换，v9实战同款） | `references/apple-gallery-showcase.md` |

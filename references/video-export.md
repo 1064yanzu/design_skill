@@ -45,12 +45,33 @@ NODE_PATH=$(npm root -g) node /path/to/claude-design/scripts/render-video.js <ht
 
 输出：与 HTML 同目录，同名 `.mp4`。
 
-### 2. `add-music.sh` — MP4 + BGM → MP4
+### 2. `generate-tts.js` — 文案 → TTS 音轨
 
-给无声 MP4 混入背景音乐，按场景（mood）从内置 BGM 库里选，也可自带音频。自动匹配时长、加淡入淡出。
+给动画补旁白时，先生成独立 voiceover 音轨，再进入最终混音。当前内置接入 Xiaomi MiMo TTS、GeekAI `audio/speech`、NewAPI `v1/audio/speech`。
 
 ```bash
-bash add-music.sh <input.mp4> [--mood=<name>] [--music=<path>] [--out=<path>]
+node scripts/generate-tts.js --config=docs/examples/mimo-tts.config.example.json
+node scripts/generate-tts.js --config=docs/examples/geekai-tts.config.example.json
+node scripts/generate-tts.js --config=docs/examples/newapi-tts.config.example.json
+```
+
+配置要点：
+- `text` 或 `textFile`：真正要念出来的文案，会放在 `assistant` 消息
+- `stylePrompt`：预置音色 / 音色复刻模式下的风格指令
+- `voiceDesignPrompt`：`mimo-v2.5-tts-voicedesign` 必填
+- `voiceSampleFile`：`mimo-v2.5-tts-voiceclone` 必填，支持 `mp3` / `wav`
+- `audio.voice`：预置音色模式可直接填 `冰糖`、`茉莉`、`Chloe` 等
+- `voice` / `responseFormat` / `speed`：OpenAI 兼容 `audio/speech` provider 使用
+- `instructions`：GeekAI 及部分兼容接口可用
+
+更完整字段说明见 `docs/mimo-tts.md`。
+
+### 3. `add-music.sh` — MP4 + Voiceover/BGM → MP4
+
+给无声 MP4 混入背景音乐，或把 `voiceover + BGM` 一起合成为成品。自动匹配时长、加淡入淡出；有旁白时自动 duck BGM。
+
+```bash
+bash add-music.sh <input.mp4> [--mood=<name>] [--music=<path>] [--voiceover=<path>] [--out=<path>]
 ```
 
 **内置 BGM 库**（在 `assets/bgm-<mood>.mp3`）：
@@ -66,10 +87,14 @@ bash add-music.sh <input.mp4> [--mood=<name>] [--music=<path>] [--out=<path>]
 
 **行为**：
 - 音乐按视频时长裁剪
-- 0.3s 淡入 + 1s 淡出（避免硬切）
+- 0.3s 淡入 + 1.5s 淡出（避免硬切）
 - 视频流 `-c:v copy` 不重编码，音频 AAC 192k
 - `--music=<path>` 优先级高于 `--mood`，可以直接指定任意外部音频
 - 传错 mood 名会列出所有可用选项，不会静默失败
+- `--voiceover=<path>` 可叠加旁白音轨
+- `--no-bgm` 只保留旁白，不混背景音乐
+- `--bgm-volume=` / `--voice-volume=` 可手调响度
+- 有旁白时默认 `BGM=0.18`，无旁白时默认 `BGM=0.45`
 
 **典型流水线**（动画导出三件套 + 配乐）：
 ```bash
@@ -79,11 +104,14 @@ bash add-music.sh animation-60fps.mp4                      # 加默认 tech BGM
 # 或针对不同场景：
 bash add-music.sh tutorial-demo.mp4 --mood=tutorial
 bash add-music.sh product-promo.mp4 --mood=ad --out=promo-final.mp4
+# 有旁白时：
+node scripts/generate-tts.js --config=docs/examples/mimo-tts.config.example.json
+bash add-music.sh tutorial-demo.mp4 --voiceover=tmp/voiceover.wav --mood=tutorial --out=tutorial-final.mp4
 ```
 
-### 3. `convert-formats.sh` — MP4 → 60fps MP4 + GIF
+### 4. `convert-formats.sh` — MP4 → 60fps MP4 + GIF
 
-从已有 MP4 生成 60fps 版本和 GIF。
+从已有 MP4 生成 60fps 版本和 GIF。若输入 MP4 已经带音频，`<name>-60fps.mp4` 会保留音轨；GIF 仍然天然无声。
 
 ```bash
 bash /path/to/claude-design/scripts/convert-formats.sh <input.mp4> [gif_width] [--minterpolate]
@@ -119,13 +147,20 @@ cd <项目目录>
 # 1. 录 25fps 基础 MP4
 NODE_PATH=$(npm root -g) node "$SKILL/scripts/render-video.js" my-animation.html
 
-# 2. 派生 60fps MP4 和 GIF
-bash "$SKILL/scripts/convert-formats.sh" my-animation.mp4
+# 2. 如需旁白，先生成 TTS
+node "$SKILL/scripts/generate-tts.js" --config="$SKILL/docs/examples/mimo-tts.config.example.json"
+
+# 3. 给基础 MP4 合成最终音轨
+bash "$SKILL/scripts/add-music.sh" my-animation.mp4 --voiceover=tmp/voiceover.wav --mood=tutorial --out=my-animation-final.mp4
+
+# 4. 再按需要派生 60fps MP4 和 GIF
+bash "$SKILL/scripts/convert-formats.sh" my-animation-final.mp4
 
 # 产出清单：
 # my-animation.mp4         (25fps · 1-2 MB)
-# my-animation-60fps.mp4   (60fps · 1.5-3 MB)
-# my-animation.gif         (15fps · 2-4 MB)
+# my-animation-final.mp4   (25fps · voiceover + BGM)
+# my-animation-final-60fps.mp4   (60fps · 保留音轨)
+# my-animation-final.gif         (15fps · 2-4 MB)
 ```
 
 ## 技术细节（排错用）
@@ -171,11 +206,13 @@ GIF 只能 256 色。一次 pass 的 GIF 会把全动画色彩压到 256 色通�
 - [ ] HTML 在浏览器里完整跑过一遍，无控制台错误
 - [ ] 动画第 0 帧是完整初始状态（不是空白加载中）
 - [ ] 动画最后一帧是稳定的收尾状态（不是半截）
+- [ ] 若有 TTS，确认文案、音色、情绪风格和画面叙事一致
 - [ ] 字体/图片/emoji 全部正常渲染（参考 `animation-pitfalls.md`）
 - [ ] Duration 参数与 HTML 里的实际动画时长匹配
 - [ ] HTML 中 Stage 检测 `window.__recording` 强制 loop=false（手写 Stage 必查；用 `assets/animations.jsx` 自带）
 - [ ] 结尾 Sprite 的 `fadeOut={0}`（视频末帧不淡出）
 - [ ] 含「Created by Huashu-Design」水印（仅动画场景必加；第三方品牌作品加「非官方出品 · 」前缀。详见 SKILL.md §「Skill 推广水印」）
+- [ ] 最终 MP4 用 `ffprobe -select_streams a` 能查到音频流
 
 ## 交付时附带的说明
 

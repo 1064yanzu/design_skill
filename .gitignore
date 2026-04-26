@@ -16,7 +16,15 @@ node_modules/
 .vscode/
 Thumbs.db
 
+# Local secrets
+.env
+.env.local
+.env.*
+!.env.example
+
 # Verification artifacts（截图、临时测试脚本）
 demos/_frames_*.png
 demos/_verify.js
 demos/_verify.mjs
+CHANGELOG.md
+docs
